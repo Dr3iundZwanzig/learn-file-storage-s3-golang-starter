@@ -1,6 +1,7 @@
 package main
 
 import (
+	"mime"
 	"os"
 )
 
@@ -9,4 +10,12 @@ func (cfg apiConfig) ensureAssetsDir() error {
 		return os.Mkdir(cfg.assetsRoot, 0755)
 	}
 	return nil
+}
+
+func getExtensionType(contentType string) string {
+	extensions, err := mime.ExtensionsByType(contentType)
+	if err != nil || len(extensions) == 0 {
+		return ""
+	}
+	return extensions[0]
 }
