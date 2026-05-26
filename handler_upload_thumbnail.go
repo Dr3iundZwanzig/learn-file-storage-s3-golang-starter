@@ -44,8 +44,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 	contentType := header.Header.Get("Content-Type")
-	ext := getExtensionType(contentType)
-	if ext == "" {
+	ext, err := getExtensionType(contentType)
+	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unknowen file extension", err)
 		return
 	}

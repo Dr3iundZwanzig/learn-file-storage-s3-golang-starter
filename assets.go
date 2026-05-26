@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"mime"
 	"os"
 )
@@ -12,10 +13,14 @@ func (cfg apiConfig) ensureAssetsDir() error {
 	return nil
 }
 
-func getExtensionType(contentType string) string {
+func getExtensionType(contentType string) (string, error) {
 	extensions, err := mime.ExtensionsByType(contentType)
 	if err != nil || len(extensions) == 0 {
-		return ""
+		return "", err
 	}
-	return extensions[0]
+	ext := extensions[0]
+	if ext != ".jpeg" && ext != ".png" {
+		return "", fmt.Errorf("Error wrong format")
+	}
+	return ext, nil
 }
