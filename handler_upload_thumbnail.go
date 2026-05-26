@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -42,11 +44,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 	defer file.Close()
 	contentType := header.Header.Get("Content-Type")
-	imageData, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Unable to read form file", err)
+	ext := getExtensionType(contentType)
+	if ext == "" {
+		respondWithError(w, http.StatusBadRequest, "Unknowen file extension", err)
 		return
 	}
+
 	videoMetadata, err := cfg.db.GetVideo(videoID)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to get video data", err)
@@ -56,13 +59,20 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "Current user is not the owner", err)
 		return
 	}
-	thumbnailStruct := thumbnail{
-		data:      imageData,
-		mediaType: contentType,
+	filename := filepath.Join(cfg.assetsRoot, videoID.String()+ext)
+	osFile, err := os.Create(filename)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to create file", err)
+		return
 	}
-	thumbnailURL := "http://localhost:" + cfg.port + "/api/thumbnails/" + videoMetadata.ID.String()
-	videoThumbnails[videoMetadata.ID] = thumbnailStruct
-	videoMetadata.ThumbnailURL = &thumbnailURL
+	defer osFile.Close()
+	_, err = io.Copy(osFile, file)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to writing to file", err)
+		return
+	}
+	dataURL := "http://localhost:" + cfg.port + "/" + filename
+	videoMetadata.ThumbnailURL = &dataURL
 	err = cfg.db.UpdateVideo(videoMetadata)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to update video", err)
