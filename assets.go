@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"mime"
 	"os"
@@ -23,4 +25,13 @@ func getExtensionType(contentType string) (string, error) {
 		return "", fmt.Errorf("Error wrong format")
 	}
 	return ext, nil
+}
+
+func makeRandomBase64String() (string, error) {
+	base := make([]byte, 32)
+	_, err := rand.Read(base)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(base), nil
 }

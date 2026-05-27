@@ -59,7 +59,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		respondWithError(w, http.StatusUnauthorized, "Current user is not the owner", err)
 		return
 	}
-	filename := filepath.Join(cfg.assetsRoot, videoID.String()+ext)
+	baseUrlString, err := makeRandomBase64String()
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to url name string", err)
+		return
+	}
+	filename := filepath.Join(cfg.assetsRoot, baseUrlString+ext)
 	osFile, err := os.Create(filename)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to create file", err)
