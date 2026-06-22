@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
+	"path"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -81,7 +85,21 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Unable to generate file key", err)
 		return
 	}
+	directory := ""
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error getting ratio", err)
+	}
+	switch aspectRatio {
+	case "16:9":
+		directory = "landscape"
+	case "9:16":
+		directory = "portrait"
+	default:
+		directory = "other"
+	}
 	fileKey := randomString + ".mp4"
+	fileKey = path.Join(directory, fileKey)
 	params := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fileKey,
@@ -102,4 +120,40 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	respondWithJSON(w, http.StatusOK, videoMetadata)
 	fmt.Println("done uploading")
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	cmdCommand := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", filePath)
+
+	var buffer bytes.Buffer
+	cmdCommand.Stdout = &buffer
+	err := cmdCommand.Run()
+	if err != nil {
+		return "", fmt.Errorf("Error running command: %v", err)
+	}
+
+	var out struct {
+		Streams []struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}
+	err = json.Unmarshal(buffer.Bytes(), &out)
+	if err != nil {
+		return "", fmt.Errorf("Error unmashaling command output: %v", err)
+	}
+
+	if len(out.Streams) == 0 {
+		return "", fmt.Errorf("error no streams found for video")
+	}
+
+	videoWidth := out.Streams[0].Width
+	videoHeight := out.Streams[0].Height
+
+	if videoWidth == 16*videoHeight/9 {
+		return "16:9", nil
+	} else if videoHeight == 16*videoWidth/9 {
+		return "9:16", nil
+	}
+	return "other", nil
 }
