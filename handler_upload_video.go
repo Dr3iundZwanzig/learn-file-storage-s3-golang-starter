@@ -85,10 +85,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Unable to generate file key", err)
 		return
 	}
+
 	directory := ""
 	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error getting ratio", err)
+		return
 	}
 	switch aspectRatio {
 	case "16:9":
@@ -100,10 +102,24 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	fileKey := randomString + ".mp4"
 	fileKey = path.Join(directory, fileKey)
+
+	processedFilePath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error processing video", err)
+		return
+	}
+	defer os.Remove(processedFilePath)
+	processedFile, err := os.Open(processedFilePath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error opening processed file", err)
+		return
+	}
+	defer processedFile.Close()
+
 	params := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fileKey,
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: &contentType,
 	}
 	_, err = cfg.s3Client.PutObject(r.Context(), &params)
@@ -129,7 +145,7 @@ func getVideoAspectRatio(filePath string) (string, error) {
 	cmdCommand.Stdout = &buffer
 	err := cmdCommand.Run()
 	if err != nil {
-		return "", fmt.Errorf("Error running command: %v", err)
+		return "", fmt.Errorf("Error running command for video aspect ratio: %v", err)
 	}
 
 	var out struct {
@@ -156,4 +172,16 @@ func getVideoAspectRatio(filePath string) (string, error) {
 		return "9:16", nil
 	}
 	return "other", nil
+}
+
+func processVideoForFastStart(filePath string) (string, error) {
+	newFilePath := fmt.Sprintf("%s.processing", filePath)
+	cmdCommand := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", newFilePath)
+
+	err := cmdCommand.Run()
+	if err != nil {
+		return "", fmt.Errorf("Error running command for video fast start: %v", err)
+	}
+
+	return newFilePath, nil
 }
